@@ -396,7 +396,7 @@ function findHighestWithPositionBelow(m,sub,position){
   }
   return null;
 }
-function expand(s,n,stringify){
+function expand(s,n,legBasedAscension,stringify){
   var mountain;
   if (typeof s=="string") mountain=calcMountain(s);
   else mountain=s;
@@ -494,11 +494,21 @@ function expand(s,n,stringify){
           var topNode=findHighestWithPosition(sourceSubMountain,x);
           topNodeCache[sourceSubMountainAndPositionID]=topNode;
           if (!topNode) continue;
-          var referenceRow=subBadRootRow&&subBadRootRow.coord[1]&&findByCoord(sourceSubMountain,addCoord(subBadRootRow.coord,1,-1),1)||subBadRootRow;
-          var nodeInReferenceRow=referenceRow&&findHighestWithPosition(referenceRow,x);
-          while (nodeInReferenceRow&&nodeInReferenceRow.position>badRootPosition) nodeInReferenceRow=parent(referenceRow,nodeInReferenceRow);
-          var isAscending=nodeInReferenceRow&&nodeInReferenceRow.position==badRootPosition;
-          isAscendingCache[sourceSubMountainAndPositionID]=isAscending;
+          if (legBasedAscension){
+            var nodeInSubBadRootRow=subBadRootRow&&findHighestWithPosition(subBadRootRow,x);
+            while (nodeInSubBadRootRow&&nodeInSubBadRootRow.position>badRootPosition){
+              var leftLegPosition=nodeInSubBadRootRow.leftLegCoord?sumArray(nodeInSubBadRootRow.leftLegCoord):nodeInSubBadRootRow.position-1;
+              nodeInSubBadRootRow=findHighestWithPosition(subBadRootRow,leftLegPosition);
+            }
+            var isAscending=nodeInSubBadRootRow&&nodeInSubBadRootRow.position==badRootPosition;
+            isAscendingCache[sourceSubMountainAndPositionID]=isAscending;
+          }else{
+            var referenceRow=subBadRootRow&&subBadRootRow.coord[1]&&findByCoord(sourceSubMountain,addCoord(subBadRootRow.coord,1,-1),1)||subBadRootRow;
+            var nodeInReferenceRow=referenceRow&&findHighestWithPosition(referenceRow,x);
+            while (nodeInReferenceRow&&nodeInReferenceRow.position>badRootPosition) nodeInReferenceRow=parent(referenceRow,nodeInReferenceRow);
+            var isAscending=nodeInReferenceRow&&nodeInReferenceRow.position==badRootPosition;
+            isAscendingCache[sourceSubMountainAndPositionID]=isAscending;
+          }
         }else{
           var topNode=topNodeCache[sourceSubMountainAndPositionID];
           if (!topNode) continue;
@@ -769,7 +779,7 @@ function expand(s,n,stringify){
   if (debugout) dg("debugout").textContent=debugout;
   return rr;
 }
-function expandmulti(s,nstring){
+function expandmulti(s,nstring,legBasedAscension){
   var result=calcMountain(s,maxDimensions);
   if (result.dim>maxDimensions){
     var lastPosition=getLastPosition(result);
@@ -777,7 +787,7 @@ function expandmulti(s,nstring){
       if (findHighestWithPosition(result,x).value!=1) return "Aborted: Maximum dimensions reached.";
     }
   }
-  for (var i of nstring.split(",")) result=expand(result,+i);
+  for (var i of nstring.split(",")) result=expand(result,+i,legBasedAscension);
   return result;
 }
 function generateRandom(){
@@ -787,7 +797,7 @@ function generateRandom(){
     var l=Math.floor(6*Math.random()+5);
     var d=Date.now();
     for (var x=3;x<=l&&Date.now()-d<1000;x++){
-      a=expand(a,2).split(",").slice(0,x);
+      a=expand(a,2,legBasedAscension).split(",").slice(0,x);
       a[x-1]=Math.floor(a[x-1]*Math.random()+1);
       a=a.join(",");
       if (+a.split(",")[x-1]<=1) break;
@@ -801,19 +811,31 @@ var input="";
 var inputn="3";
 var maxDimensions=10;
 var noLimitToN=false;
+var legBasedAscension=false;
 var automaticallyExpandOnChange=false;
+var autoTimeout=0;
 function expandall(auto){
   automaticallyExpandOnChange=dg("automaticallyExpandOnChange").checked;
-  if (!automaticallyExpandOnChange&&auto) return;
-  if (input==dg("input").value&&inputn==dg("inputn").value&&maxDimensions==dg("maxDimensions").value&&noLimitToN==dg("noLimitToN").checked) return;
+  if (auto&&(!automaticallyExpandOnChange||autoTimeout)) return;
+  if (input==dg("input").value&&
+      inputn==dg("inputn").value&&
+      maxDimensions==dg("maxDimensions").value&&
+      noLimitToN==dg("noLimitToN").checked&&
+      legBasedAscension==dg("legBasedAscension").checked)
+    return;
   input=dg("input").value;
   inputn=dg("inputn").value;
   maxDimensions=Number(dg("maxDimensions").value)||0;
   noLimitToN=dg("noLimitToN").checked;
-  if (!noLimitToN&&inputn.split(",").some(function(e){return +e>10;})) dg("output").value="Aborted: Large n detected.";
-  else dg("output").value=input.split(lineBreakRegex).map(e=>expandmulti(e,inputn)).join("\n");
+  legBasedAscension=dg("legBasedAscension").checked;
+  try{
+    if (!noLimitToN&&inputn.split(",").some(function(e){return +e>10;})) dg("output").value="Aborted: Large n detected.";
+    else dg("output").value=input.split(lineBreakRegex).map(e=>expandmulti(e,inputn,legBasedAscension)).join("\n");
+  }finally{
+    if (auto) autoTimeout=setTimeout(_=>(autoTimeout=0,expandall(true)),100);
+  }
 }
 var handlekey=function(e){
-  setTimeout(expandall,10,true);
+  expandall(true);
 }
 window.onerror=function (e,s,l,c,o){var a=e+"\n"+s+":"+l+":"+c+"\n"+(o&&o.stack);alert(a);dg("errout").innerHTML=a.replace(lineBreakRegex,"<br>");}
